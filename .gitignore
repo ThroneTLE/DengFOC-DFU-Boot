@@ -1,0 +1,10 @@
+build/
+__pycache__/
+*.pyc
+
+# vendor manuals and shop screenshots: copyrighted, kept locally only (see docs/reference/README.md)
+docs/reference/*
+!docs/reference/README.md
+
+# machine-specific Claude Code MCP setup (absolute local paths)
+.mcp.json
