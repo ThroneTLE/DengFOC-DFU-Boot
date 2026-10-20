@@ -68,6 +68,7 @@ python -X utf8 synex_offline_config.py dengfoc
 ## Synex 的坑（4.0.1）
 
 - **没有按钮控件。** 一排按钮用"模式选择"控件做，并打开"同状态重发"；单个命令放在命令面板。
+- **实时曲线的横轴是缓存里的位置，不是真实时间。** 范围固定是 0 到 缓存点数 × 采样间隔（40000 × 0.5 ms = 20 s），新数据在这个框里滚动。通过 MCP 新建的曲线会继承一个旧窗口（比如 487–490 s），落在框外，表现为"有数据、数值在变，曲线却是空的，Pts: 0w"。建页面时要把每个曲线的 `xRangeLower`/`xRangeUpper` 设成 0 和缓存时长（`build_dengfoc_page.py` 里的 `X_SPAN_S`）；改了缓存点数或采样间隔，这个值也要跟着改。4.0 的界面里没有缓存设置窗口，缓存点数只能离线改 config.ini 的 `SerialbufferSize`。
 - **通过 MCP 新增控件时，位置和配置都会被忽略。** 要先 `addTile`，再对返回的 id 发 `updateTileGeometry` 和 `updateTileConfig`（字段名是 `patch`，不是 `config`）。
 - **通道名会被历史数据覆盖。** 启动时 Synex 会导入 `plot_data.csv`（3.x 是 `plot_data.splot`），通道数和名字都取自里面；退出时又把这些名字写回 config.ini，并重新导出历史文件。所以改通道名必须先关掉 Synex，再把历史文件移开。
 - **退出时会重写 config.ini。** 离线修改只能在 Synex 关闭时做，否则会被覆盖。控件的配置存在二进制的 `@Variant` 里，只能通过 MCP 改；位置（`PageN\TileM\col/row/colSpan/rowSpan`）是普通键，可以离线改。

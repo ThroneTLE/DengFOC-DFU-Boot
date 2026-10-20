@@ -62,9 +62,16 @@ def slider(title, tmpl, lo, hi, step, val, col, row, w=24, h=7):
                        "resendCount": 0}}
 
 
+# The real-time plot x axis is the position in the sample buffer, 0 .. SerialbufferSize x
+# PlotSampleTimeMs (40000 x 0.5 ms, set by synex_offline_config.py), in seconds. A new tile
+# inherits some old window (e.g. 487-490 s) that lies outside it and stays blank.
+X_SPAN_S = 40000 * 0.5 / 1000
+
+
 def plot(title, chans, col, row, w, h):
     return {"type": "Plot", "title": title, "geometry": g(col, row, w, h),
-            "config": {"selectedChannels": chans, "dynamicYRangeEnabled": True, "topWidgetVisible": True}}
+            "config": {"selectedChannels": chans, "dynamicYRangeEnabled": True, "topWidgetVisible": True,
+                       "xRangeLower": 0.0, "xRangeUpper": X_SPAN_S}}
 
 
 def selector(title, tmpl, labels, values, col, row, w, h=6):

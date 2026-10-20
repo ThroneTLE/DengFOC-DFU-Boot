@@ -134,7 +134,7 @@ def cmd_dengfoc(path):
     set_channel_names(ini, DENGFOC_NAMES)
     removed = ini.keep_only("DerivedChannels", {"FormatVersion"})
     ini.set("MainWindowSettings", "PlotSampleTimeMs", "0.5")   # firmware streams at 2 kHz
-    ini.set("MainWindowSettings", "SerialbufferSize", "40000")  # 20 s at 2 kHz
+    ini.set("MainWindowSettings", "SerialbufferSize", "40000")  # 20 s at 2 kHz; keep X_SPAN_S in build_dengfoc_page.py in step
     backup = ini.save()
     history = reset_plot_history(os.path.dirname(os.path.abspath(path)))
     print("backup:", backup)
