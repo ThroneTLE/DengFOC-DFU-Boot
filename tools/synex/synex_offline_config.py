@@ -6,7 +6,7 @@ touched here; change those live through the MCP bridge.
 Refuses to run while Synex.exe is running, because Synex rewrites config.ini on exit.
 
 Usage:
-  python -X utf8 synex_offline_config.py dengfoc [--config PATH]
+  python -X utf8 synex_offline_config.py dengfoc [--config PATH]   (default: ../../Synex/config.ini)
 """
 import argparse
 import os
@@ -15,7 +15,10 @@ import subprocess
 import sys
 import time
 
-DEFAULT_CONFIG = r"E:/User/Desk/Synex_v3.0.5/config.ini"
+# this project's own copy of Synex (tools/synex/install_synex.py); SYNEX_DIR overrides
+SYNEX_DIR = os.environ.get("SYNEX_DIR", os.path.normpath(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "Synex")))
+DEFAULT_CONFIG = os.path.join(SYNEX_DIR, "config.ini")
 
 DENGFOC_NAMES = ["目标", "位置_deg", "速度_rad_s", "速度参考", "Uq_V", "电角度_rad", "母线_V", "中断_us",
                  "模式", "故障", "MOS温度_C", "已校准", "旋钮档位", "旋钮模式"]
@@ -43,10 +46,22 @@ def reset_plot_history(synex_dir):
     return moved
 
 
-def synex_running():
-    # tasklist prints in the console code page (GBK here), so compare raw bytes
-    out = subprocess.run(["tasklist", "/FI", "IMAGENAME eq Synex.exe"], capture_output=True).stdout
-    return b"Synex.exe" in out
+def synex_pids(folder=None):
+    """PIDs of Synex.exe processes, only those started from `folder` if given."""
+    ps = "Get-Process Synex -ErrorAction SilentlyContinue | ForEach-Object { \"$($_.Id)|$($_.Path)\" }"
+    out = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True).stdout
+    want = os.path.normcase(os.path.abspath(os.path.join(folder, "Synex.exe"))) if folder else None
+    pids = []
+    for line in out.splitlines():
+        pid, _, path = line.strip().partition("|")
+        if pid and (want is None or os.path.normcase(os.path.abspath(path)) == want):
+            pids.append(int(pid))
+    return pids
+
+
+def synex_running(folder=SYNEX_DIR):
+    """Is the Synex that owns `folder`/config.ini running? (other copies do not matter)"""
+    return bool(synex_pids(folder))
 
 
 class Ini:
@@ -134,7 +149,7 @@ def main():
     ap.add_argument("action", choices=["dengfoc"])
     ap.add_argument("--config", default=DEFAULT_CONFIG)
     args = ap.parse_args()
-    if synex_running():
+    if synex_running(os.path.dirname(os.path.abspath(args.config))):
         sys.exit("Synex is running: close it first, otherwise it overwrites config.ini on exit")
     if args.action == "dengfoc":
         cmd_dengfoc(args.config)

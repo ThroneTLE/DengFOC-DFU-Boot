@@ -23,7 +23,8 @@ import threading
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from synex_offline_config import Ini, reset_plot_history, set_channel_names, synex_running  # noqa: E402
 
-SYNEX_DIR = os.environ.get("SYNEX_DIR", r"E:/User/Desk/Synex_v3.0.5")
+SYNEX_DIR = os.environ.get("SYNEX_DIR", os.path.normpath(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "Synex")))
 UPSTREAM_EXE = os.path.join(SYNEX_DIR, "mcp", "SynexMcpServer.exe")
 CONFIG = os.path.join(SYNEX_DIR, "config.ini")
 PROTOCOL_VERSION = "2025-03-26"
@@ -101,7 +102,7 @@ def t_synex_status(_args):
             bridge = json.load(open(discovery, encoding="utf-8"))
         except (OSError, ValueError):
             bridge = "unreadable"
-    return text_result({"synexRunning": synex_running(), "synexDir": SYNEX_DIR, "config": CONFIG,
+    return text_result({"synexRunning": synex_running(SYNEX_DIR), "synexDir": SYNEX_DIR, "config": CONFIG,
                         "upstreamServer": UPSTREAM_EXE, "upstreamExists": os.path.exists(UPSTREAM_EXE),
                         "bridgeDiscovery": bridge})
 
@@ -129,11 +130,11 @@ def t_get_connection_settings(_args):
     return text_result({"connection": {k: conn.get(k) for k in keep},
                         "display": {k: main.get(k) for k in ["SerialChannelNum", "SerialbufferSize",
                                                               "PlotSampleTimeMs", "PlotRefreshFps"]},
-                        "channelNames": names, "note": note, "synexRunning": synex_running()})
+                        "channelNames": names, "note": note, "synexRunning": synex_running(SYNEX_DIR)})
 
 
 def t_offline_update_settings(args):
-    if synex_running():
+    if synex_running(SYNEX_DIR):
         return text_result("Synex is running. Close it first: it rewrites config.ini on exit "
                            "and would discard these edits.", True)
     ini = Ini(CONFIG)

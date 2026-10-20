@@ -106,7 +106,7 @@ python tools/scope_capture.py --seconds 4 --cmd "vel 5" --cmd "@2 vel -5" --cmd 
 
 - 通道：目标、位置、速度、速度参考、Uq、电角度、母线电压、中断耗时、模式、故障、MOS 温度、已校准、旋钮档位、旋钮模式。通道表见 [foc_demo README](firmware/apps/foc_demo/README.md#实时波形)。
 - **VOFA+**：协议选 JustFloat，14 个通道，发 `scope 1` 开始推送。
-- **Synex**：[tools/synex](tools/synex/README.md) 能生成"电机"和"力反馈旋钮"两个按钮页。
+- **Synex**：工程自带一份 Synex 的配置 `Synex/config.ini`，里面有"电机"和"力反馈旋钮"两个按钮页。Synex 程序本体不在仓库里，用 `tools/synex/install_synex.py` 从已有的 Synex 拷一份进来即可，详见 [tools/synex](tools/synex/README.md)。
 
 ## 目录
 
@@ -124,6 +124,7 @@ python tools/scope_capture.py --seconds 4 --cmd "vel 5" --cmd "@2 vel -5" --cmd 
 │   │   └── foc_demo/            FOC + 力反馈旋钮（0x08008000）
 │   └── lib/                     CMSIS、STM32F4 HAL、ST USB Device 库、启动文件
 ├── experiments/                 实验记录：指标 → 对象 → 设计 → 验证，含原始数据
+├── Synex/                       本工程专用的 Synex 上位机（仓库里只有 config.ini）
 └── tools/
     ├── dengfoc_cli.py           USB 命令行
     ├── scope_capture.py         波形流存 CSV，可按时间发命令

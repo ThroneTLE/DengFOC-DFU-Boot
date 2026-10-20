@@ -1,10 +1,24 @@
 # Synex 上位机配置（DengFOC 电机页、力反馈旋钮页）
 
-Synex v4（`E:\User\Desk\Synex_v3.0.5`）里已经配好两个页面："DengFOC 电机"和"力反馈旋钮"。日常使用不需要运行这里的脚本；它们用来在 Synex 重装、配置被重置时重新生成页面。
+本工程自带一份 Synex v4，放在仓库根目录的 `Synex/`。里面的 `config.ini` 已经配好两个页面："DengFOC 电机"和"力反馈旋钮"。
+
+## 每个工程一份 Synex
+
+Synex 是绿色软件：所有设置都存在 `Synex.exe` 旁边的 `config.ini`（另有波形历史 `plot_data.*` 和日志 `SynexLog.txt`），自带 Qt 和 VC++ 运行库，不写注册表，拷到别的 Windows 10/11 电脑上能直接运行。所以每个工程放一份自己的 Synex，配置互不干扰。
+
+- Git 里只有 `Synex/config.ini`；程序本体约 95 MB，是第三方软件，不进仓库（见 `.gitignore`）。
+- 新电脑或新工程，用脚本从任意一份 Synex 拷一份干净的过来（不带更新缓存、备份、波形历史、日志），已有的 `config.ini` 会保留：
+
+  ```
+  python -X utf8 -I tools/synex/install_synex.py --from "E:/User/Desk/Synex_v3.0.5"
+  ```
+
+- 本目录的脚本默认操作仓库里的 `Synex/`，可以用环境变量 `SYNEX_DIR` 指到别处。
+- 几份 Synex 同时开着时，"AI 外部助手"的连接信息只有一份（`%TEMP%\Synex\ai_bridge.json`），后打开的那份会覆盖前面的。`build_dengfoc_page.py` 会核对连上的是不是本工程的 Synex，不是就停下，不会改到别的工程。
 
 ## 使用
 
-1. 打开 Synex，连接板子的 COM 口（VID:PID 0483:5740），协议 JustFloat。
+1. 打开 `Synex/Synex.exe`，连接板子的 COM 口（VID:PID 0483:5740），协议 JustFloat。
 2. 点"遥测数据流"开关开始/停止推送波形。
 3. 用按钮和滑条控制电机。每次上电先点"校准"。
 
@@ -39,8 +53,9 @@ Synex v4（`E:\User\Desk\Synex_v3.0.5`）里已经配好两个页面："DengFOC 
 
 | 文件 | 作用 | 前提 |
 |---|---|---|
-| `build_dengfoc_page.py` | 清空并重建两个页面和命令组（缺的页面会新建），最后逐个读回核对 | Synex 开着，并打开"AI 外部助手" |
-| `synex_offline_config.py dengfoc` | 写 14 个中文通道名、删除多余旧通道名、清派生通道、采样间隔 0.5 ms、缓冲 40000 点，并把波形历史文件移开 | Synex 已关闭 |
+| `build_dengfoc_page.py` | 清空并重建两个页面和命令组（缺的页面会新建），最后逐个读回核对 | 本工程的 Synex 开着，并打开"AI 外部助手" |
+| `install_synex.py --from <Synex 文件夹>` | 把一份干净的 Synex 拷进本工程的 `Synex/`，保留已有配置 | 本工程的 Synex 已关闭 |
+| `synex_offline_config.py dengfoc` | 写 14 个中文通道名、删除多余旧通道名、清派生通道、采样间隔 0.5 ms、缓冲 40000 点，并把波形历史文件移开 | 本工程的 Synex 已关闭 |
 | `synex_plus_mcp.py` | 给 Claude Code 用的 MCP（已在 `.mcp.json` 注册为 `synex-plus`）：转发 Synex 自带的全部工具，再加上离线改设置、读取控件默认配置、批量换波形通道等 | — |
 | `synex_mcp.py` | 通用命令行 MCP 客户端，调试用 | — |
 

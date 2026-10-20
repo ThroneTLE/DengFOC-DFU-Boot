@@ -11,12 +11,16 @@ Firmware telemetry (JustFloat, 14 ch): 0 目标, 1 位置_deg, 2 速度_rad_s, 3
 """
 import argparse
 import json
+import os
 import queue
 import subprocess
 import sys
 import threading
 
-EXE = r"E:/User/Desk/Synex_v3.0.5/mcp/SynexMcpServer.exe"
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from synex_offline_config import SYNEX_DIR, synex_pids  # noqa: E402
+
+EXE = os.path.join(SYNEX_DIR, "mcp", "SynexMcpServer.exe")
 PAGE = "DengFOC 电机"
 KNOB_PAGE = "力反馈旋钮"
 GROUP = "DengFOC 电机"
@@ -244,6 +248,11 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
     sx = Synex()
+    # every Synex copy shares one AI-bridge discovery file: make sure it is this project's
+    pid = sx.call("app_ping", {}).get("pid")
+    if pid not in synex_pids(SYNEX_DIR):
+        sys.exit(f"the AI bridge belongs to Synex pid {pid}, not the one in {SYNEX_DIR}: "
+                 "turn on 'AI 外部助手' in this project's Synex")
     for name, specs in PAGES:
         build_page(sx, name, specs, args.dry_run)
 

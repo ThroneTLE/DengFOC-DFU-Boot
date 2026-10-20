@@ -8,3 +8,7 @@ docs/reference/*
 
 # machine-specific Claude Code MCP setup (absolute local paths)
 .mcp.json
+
+# this project's own copy of Synex (tools/synex/install_synex.py): keep only its config
+Synex/*
+!Synex/config.ini
