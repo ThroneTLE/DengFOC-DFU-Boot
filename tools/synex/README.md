@@ -55,7 +55,8 @@ Synex 是绿色软件：所有设置都存在 `Synex.exe` 旁边的 `config.ini`
 |---|---|---|
 | `build_dengfoc_page.py` | 清空并重建两个页面和命令组（缺的页面会新建），最后逐个读回核对 | 本工程的 Synex 开着，并打开"AI 外部助手" |
 | `install_synex.py --from <Synex 文件夹>` | 把一份干净的 Synex 拷进本工程的 `Synex/`，保留已有配置 | 本工程的 Synex 已关闭 |
-| `synex_offline_config.py dengfoc` | 写 14 个中文通道名、删除多余旧通道名、清派生通道、采样间隔 0.5 ms、缓冲 40000 点，并把波形历史文件移开 | 本工程的 Synex 已关闭 |
+| `synex_offline_config.py dengfoc` | 写 14 个中文通道名、删除多余旧通道名、清派生通道、采样间隔 0.5 ms、缓冲 40000 点、曲线窗口 0–20 s，并把波形历史文件移开 | 本工程的 Synex 已关闭 |
+| `synex_offline_config.py plotwindow` | 只把所有曲线窗口改成 0–20 s（曲线不出图时用） | 本工程的 Synex 已关闭 |
 | `synex_plus_mcp.py` | 给 Claude Code 用的 MCP（已在 `.mcp.json` 注册为 `synex-plus`）：转发 Synex 自带的全部工具，再加上离线改设置、读取控件默认配置、批量换波形通道等 | — |
 | `synex_mcp.py` | 通用命令行 MCP 客户端，调试用 | — |
 
@@ -68,7 +69,7 @@ python -X utf8 synex_offline_config.py dengfoc
 ## Synex 的坑（4.0.1）
 
 - **没有按钮控件。** 一排按钮用"模式选择"控件做，并打开"同状态重发"；单个命令放在命令面板。
-- **实时曲线的横轴是缓存里的位置，不是真实时间。** 范围固定是 0 到 缓存点数 × 采样间隔（40000 × 0.5 ms = 20 s），新数据在这个框里滚动。通过 MCP 新建的曲线会继承一个旧窗口（比如 487–490 s），落在框外，表现为"有数据、数值在变，曲线却是空的，Pts: 0w"。建页面时要把每个曲线的 `xRangeLower`/`xRangeUpper` 设成 0 和缓存时长（`build_dengfoc_page.py` 里的 `X_SPAN_S`）；改了缓存点数或采样间隔，这个值也要跟着改。4.0 的界面里没有缓存设置窗口，缓存点数只能离线改 config.ini 的 `SerialbufferSize`。
+- **实时曲线的横轴是缓存里的位置，不是真实时间。** 范围固定是 0 到 缓存点数 × 采样间隔（40000 × 0.5 ms = 20 s），新数据在这个框里滚动。通过 MCP 新建的曲线会继承一个旧窗口（比如 487–490 s），落在框外，表现为"有数据、数值在变，曲线却是空的，Pts: 0w"。而且通过 MCP 改的曲线窗口退出时不一定被保存，`[PlotSettings]` 里还有一个所有曲线共用的 `globalXRange`，启动时会把曲线拉回旧窗口。所以要在 Synex 关闭时运行 `synex_offline_config.py plotwindow`（`dengfoc` 也会做）：把全局窗口和每个曲线的窗口都改成 0 到缓存时长。它先对配置里所有 `@Variant` 值做解码再编码的往返校验，逐字一致才写入。`build_dengfoc_page.py` 建页面时也会设同样的窗口（`X_SPAN_S`）；改了缓存点数或采样间隔，这两处都要跟着改。4.0 的界面里没有缓存设置窗口，缓存点数只能离线改 config.ini 的 `SerialbufferSize`。
 - **通过 MCP 新增控件时，位置和配置都会被忽略。** 要先 `addTile`，再对返回的 id 发 `updateTileGeometry` 和 `updateTileConfig`（字段名是 `patch`，不是 `config`）。
 - **通道名会被历史数据覆盖。** 启动时 Synex 会导入 `plot_data.csv`（3.x 是 `plot_data.splot`），通道数和名字都取自里面；退出时又把这些名字写回 config.ini，并重新导出历史文件。所以改通道名必须先关掉 Synex，再把历史文件移开。
 - **退出时会重写 config.ini。** 离线修改只能在 Synex 关闭时做，否则会被覆盖。控件的配置存在二进制的 `@Variant` 里，只能通过 MCP 改；位置（`PageN\TileM\col/row/colSpan/rowSpan`）是普通键，可以离线改。

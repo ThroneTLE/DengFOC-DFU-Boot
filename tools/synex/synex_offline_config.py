@@ -1,16 +1,19 @@
 """Edit plain-text keys of Synex config.ini while Synex is closed.
 
-Covers what the Synex MCP bridge cannot reach: physical channel names, plot sample
-time, buffer size, and wiping derived channels. Tile states (@Variant blobs) are not
-touched here; change those live through the MCP bridge.
+Covers what the Synex MCP bridge cannot reach or does not save: physical channel names,
+plot sample time, buffer size, derived channels, and the plot x windows (inside the
+@Variant tile states; every value is round-trip checked before anything is written).
 Refuses to run while Synex.exe is running, because Synex rewrites config.ini on exit.
 
 Usage:
   python -X utf8 synex_offline_config.py dengfoc [--config PATH]   (default: ../../Synex/config.ini)
+  python -X utf8 synex_offline_config.py plotwindow [--seconds 20]  plot x windows only
+  python -X utf8 synex_offline_config.py check                       round-trip test, read-only
 """
 import argparse
 import os
 import shutil
+import struct
 import subprocess
 import sys
 import time
@@ -129,12 +132,135 @@ class Ini:
         return backup
 
 
+# --- tile states: QSettings "@Variant(...)" values -------------------------------
+# Qt writes the QDataStream bytes of the variant with these escapes (qsettings.cpp,
+# iniEscapedString): \0 \a \b \f \n \r \t \v \" \\, other bytes < 0x20 or >= 0x7f as
+# \x<hex>, and after \0 or \x.. a following hex-digit character is escaped as well.
+_ESC = {"0": 0, "a": 7, "b": 8, "f": 12, "n": 10, "r": 13, "t": 9, "v": 11, '"': 34, "\\": 92}
+_ESC_OUT = {7: "\\a", 8: "\\b", 12: "\\f", 10: "\\n", 13: "\\r", 9: "\\t", 11: "\\v", 34: '\\"', 92: "\\\\"}
+_HEX = set(b"0123456789abcdefABCDEF")
+
+
+def variant_decode(s):
+    out = bytearray()
+    i = 0
+    while i < len(s):
+        c = s[i]
+        if c == "\\":
+            n = s[i + 1]
+            if n == "x":
+                j = i + 2
+                while j < len(s) and s[j] in "0123456789abcdefABCDEF":
+                    j += 1
+                out.append(int(s[i + 2:j], 16))
+                i = j
+                continue
+            out.append(_ESC[n])
+            i += 2
+            continue
+        out.append(ord(c))
+        i += 1
+    return bytes(out)
+
+
+def variant_encode(raw):
+    out = []
+    esc_next = False
+    for b in raw:
+        if esc_next and b in _HEX:
+            out.append("\\x%x" % b)
+            continue
+        esc_next = False
+        if b == 0:
+            out.append("\\0")
+            esc_next = True
+        elif b in _ESC_OUT:
+            out.append(_ESC_OUT[b])
+        elif b < 0x20 or b >= 0x7f:
+            out.append("\\x%x" % b)
+            esc_next = True
+        else:
+            out.append(chr(b))
+    return "".join(out)
+
+
+def _split_variant(line):
+    """'key=@Variant(...)' or 'key="@Variant(...)"' -> (key, body) or None."""
+    key, _, val = line.partition("=")
+    if val.startswith('"@Variant(') and val.endswith(')"'):
+        return key, val[10:-2]
+    if val.startswith("@Variant(") and val.endswith(")"):
+        return key, val[9:-1]
+    return None
+
+
+def _join_variant(key, raw):
+    body = variant_encode(raw)
+    quoted = any(b in b";,=" for b in raw)   # Qt quotes values containing ; , =
+    return f'{key}="@Variant({body})"' if quoted else f"{key}=@Variant({body})"
+
+
+def check_variants(ini):
+    """Decode and re-encode every @Variant line; returns (count, mismatching keys)."""
+    n, bad = 0, []
+    for ln in ini.lines:
+        sv = _split_variant(ln)
+        if sv:
+            n += 1
+            if _join_variant(sv[0], variant_decode(sv[1])) != ln:
+                bad.append(sv[0])
+    return n, bad
+
+
+def _set_double(raw, key, value):
+    k = key.encode("utf-16-be")
+    i = raw.find(struct.pack(">I", len(k)) + k)
+    if i < 0:
+        return raw, False
+    j = i + 4 + len(k)
+    if struct.unpack(">I", raw[j:j + 4])[0] != 6:   # QMetaType::Double, value follows directly
+        return raw, False
+    return raw[:j + 4] + struct.pack(">d", value) + raw[j + 12:], True
+
+
+def set_plot_windows(ini, lo, hi):
+    """Put every Plot tile (itemType 0) and the shared global x range on [lo, hi] s.
+
+    The real-time plot x axis is the position in the sample buffer, 0 .. SerialbufferSize x
+    PlotSampleTimeMs; a window outside that stays blank. Changes made through the MCP bridge
+    are not reliably saved, and the global range pulls all plots back, so fix it here."""
+    n, bad = check_variants(ini)
+    if bad:
+        raise RuntimeError(f"@Variant round trip failed for {bad[:3]}: not touching tile states")
+    plots = set()
+    for ln in ini.lines:
+        key, _, val = ln.partition("=")
+        if key.endswith("\\itemType") and val.strip() == "0":
+            plots.add(key[:-len("itemType")] + "itemState")
+    changed = 0
+    for idx, ln in enumerate(ini.lines):
+        sv = _split_variant(ln)
+        if sv and sv[0] in plots:
+            raw = variant_decode(sv[1])
+            raw, a = _set_double(raw, "xRangeLower", lo)
+            raw, b = _set_double(raw, "xRangeUpper", hi)
+            if a and b:
+                ini.lines[idx] = _join_variant(sv[0], raw)
+                changed += 1
+    ini.set("PlotSettings", "globalXRangeValid", "true")
+    ini.set("PlotSettings", "globalXRangeLower", repr(float(lo)))
+    ini.set("PlotSettings", "globalXRangeUpper", repr(float(hi)))
+    return changed, len(plots)
+
+
 def cmd_dengfoc(path):
     ini = Ini(path)
     set_channel_names(ini, DENGFOC_NAMES)
     removed = ini.keep_only("DerivedChannels", {"FormatVersion"})
     ini.set("MainWindowSettings", "PlotSampleTimeMs", "0.5")   # firmware streams at 2 kHz
     ini.set("MainWindowSettings", "SerialbufferSize", "40000")  # 20 s at 2 kHz; keep X_SPAN_S in build_dengfoc_page.py in step
+    changed, plots = set_plot_windows(ini, 0.0, 40000 * 0.5 / 1000)
+    print(f"plot windows set to 0-20 s: {changed} of {plots} plot tiles")
     backup = ini.save()
     history = reset_plot_history(os.path.dirname(os.path.abspath(path)))
     print("backup:", backup)
@@ -146,13 +272,22 @@ def cmd_dengfoc(path):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("action", choices=["dengfoc"])
+    ap.add_argument("action", choices=["dengfoc", "plotwindow", "check"])
     ap.add_argument("--config", default=DEFAULT_CONFIG)
+    ap.add_argument("--seconds", type=float, default=40000 * 0.5 / 1000, help="plotwindow: 0..this many s")
     args = ap.parse_args()
+    if args.action == "check":   # read-only, fine while Synex runs
+        n, bad = check_variants(Ini(args.config))
+        print(f"{n} @Variant values, round trip {'OK' if not bad else 'FAILED for ' + ', '.join(bad)}")
+        return
     if synex_running(os.path.dirname(os.path.abspath(args.config))):
         sys.exit("Synex is running: close it first, otherwise it overwrites config.ini on exit")
     if args.action == "dengfoc":
         cmd_dengfoc(args.config)
+    elif args.action == "plotwindow":
+        ini = Ini(args.config)
+        changed, plots = set_plot_windows(ini, 0.0, args.seconds)
+        print(f"plot windows set to 0-{args.seconds:g} s: {changed} of {plots} plot tiles; backup", ini.save())
 
 
 if __name__ == "__main__":
